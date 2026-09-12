@@ -11,9 +11,78 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 40px auto;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 200px;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .sidebar h3 {
+            font-size: 14px;
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        .sidebar .menu-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .sidebar .menu-item:hover {
+            background: #e8e8e8;
+        }
+
+        .sidebar .menu-item.active {
+            background: #e0e0e0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .sidebar .menu-item.locked {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .sidebar .lock-icon {
+            font-size: 12px;
+            margin-left: 6px;
+        }
+
+        .sidebar .submenu {
+            margin-left: 20px;
+            display: none;
+            flex-direction: column;
+            gap: 3px;
+            padding-left: 10px;
+            border-left: 2px solid #ccc;
+        }
+
+        .sidebar .submenu.open {
+            display: flex;
+        }
+
+        .sidebar .submenu .menu-item {
+            font-size: 13px;
+            padding: 6px 10px;
+        }
+
+        .main {
+            flex: 1;
+            padding: 40px;
+            max-width: 900px;
         }
 
         .box {
@@ -55,7 +124,17 @@
 
 <body>
 
-<h1>Word Template Fillerหห</h1>
+<div class="sidebar">
+    <h3>เมนู</h3>
+    <div class="menu-item active" data-page="report">📄 รายงาน</div>
+    <div class="menu-item" data-page="master">⚙️ Master</div>
+    <div class="submenu" id="masterSubmenu">
+        <div class="menu-item" data-page="template-config">📋 Template Configuration</div>
+    </div>
+</div>
+
+<div class="main" id="mainContent">
+<h1>Word Template Filler</h1>
 
 <div class="box">
     <input
@@ -317,38 +396,235 @@ downloadBtn.addEventListener("click", async () => {
 
     URL.revokeObjectURL(url);
 
-});
+});clearBtn.addEventListener("click", resetAll);
 
-clearBtn.addEventListener("click", () => {
 
-    /*
-     * Clear file input
-     */
-    fileInput.value = "";
 
-    /*
-     * Clear form
-     */
-    form.innerHTML = "";
+/*
+ * Page Navigation - แบบง่ายๆ
+ */
+let currentPage = "report";
+let pageCache = {};
+const masterSubmenuEl = document.getElementById("masterSubmenu");
+const mainContentEl = document.getElementById("mainContent");
 
-    /*
-     * Reset data
-     */
+
+
+/*
+ * เริ่มต้น - cache หน้ารายงานตอนโหลด
+ */
+function init() {
+    pageCache["report"] = mainContentEl.innerHTML;
+    bindEvents();
+}
+
+
+
+/*
+ * ผูก event ทุกครั้งที่เปลี่ยนหน้า
+ */
+function bindEvents() {
+    const fileInput = document.getElementById("fileInput");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    // ล้าง event เก่าออกก่อน (ป้องกันการผูกซ้ำ)
+    const newFileInput = fileInput?.cloneNode(true);
+    if (fileInput && newFileInput) {
+        fileInput.parentNode.replaceChild(newFileInput, fileInput);
+    }
+
+    if (newFileInput) {
+        newFileInput.addEventListener("change", onFileChange);
+    }
+
+    if (downloadBtn) {
+        downloadBtn.addEventListener("click", onDownload);
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener("click", resetAll);
+    }
+}
+
+
+
+/*
+ * แสดงหน้าตามที่เลือก
+ */
+function showPage(page) {
+    if (page === "master") {
+        masterSubmenuEl.classList.toggle("open");
+        const isOpen = masterSubmenuEl.classList.contains("open");
+        // อัปเดต active state ของเมนูหลัก
+        document.querySelectorAll("[data-page]").forEach(item => {
+            if (item.dataset.page === "master") {
+                item.classList.toggle("active", isOpen);
+            }
+        });
+        return;
+    }
+
+    // ปิด submenu และเซ็ต active ให้ menu อื่น
+    masterSubmenuEl.classList.remove("open");
+
+    document.querySelectorAll("[data-page]").forEach(item => {
+        item.classList.toggle("active", item.dataset.page === page);
+    });
+
+    currentPage = page;
+
+    // ถ้าเป็น template-config ให้สร้างหน้าใหม่
+    if (page === "template-config") {
+        mainContentEl.innerHTML = `
+            <h1>Template Configuration</h1>
+
+            <div class="box">
+                <input
+                    type="file"
+                    id="fileInput"
+                    accept=".docx"
+                >
+            </div>
+
+            <div id="form"></div>
+
+            <button id="downloadBtn" style="display:none">
+                Download DOCX
+            </button>
+            <button id="clearBtn" style="display:none">
+                Clear
+            </button>
+        `;
+        pageCache["template-config"] = mainContentEl.innerHTML;
+        bindEvents();
+        return;
+    }
+
+    // แสดงจาก cache (หน้ารายงาน)
+    mainContentEl.innerHTML = pageCache[page] || mainContentEl.innerHTML;
+    bindEvents();
+}
+
+
+
+/*
+ * Event Handlers
+ */
+function onFileChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    JSZip.loadAsync(file)
+        .then(zip => {
+            originalZip = zip;
+            return zip.file("word/document.xml").async("string");
+        })
+        .then(xml => {
+            originalXml = xml;
+            fields = extractFields(xml);
+            renderForm(fields);
+
+            const downloadBtn = document.getElementById("downloadBtn");
+            const clearBtn = document.getElementById("clearBtn");
+
+            if (downloadBtn)
+                downloadBtn.style.display = fields.length > 0 ? "block" : "none";
+            if (clearBtn)
+                clearBtn.style.display = originalZip ? "block" : "none";
+
+            console.log("Fields:", fields);
+        })
+        .catch(err => {
+            console.error(err);
+            alert("ไม่สามารถอ่านไฟล์ DOCX ได้");
+        });
+}
+
+function onDownload() {
+    if (!originalZip) return;
+
+    const zip = originalZip;
+    let xml = originalXml;
+
+    const values = {};
+    document.querySelectorAll("input").forEach(input => {
+        values[input.dataset.field] = input.value;
+    });
+
+    xml = replaceFields(xml, values);
+
+    zip.file("word/document.xml", xml);
+
+    zip.generateAsync({ type: "blob" })
+        .then(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "generated-document.docx";
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+}
+
+
+
+/*
+ * Reset/Clear
+ */
+function resetAll() {
+    const fileInput = document.getElementById("fileInput");
+    const form = document.getElementById("form");
+
+    if (fileInput) fileInput.value = "";
+    if (form) form.innerHTML = "";
+
     originalZip = null;
     originalXml = null;
     fields = [];
 
-    /*
-     * Hide buttons
-     */
-    downloadBtn.style.display = "none";
-    clearBtn.style.display = "none";
+    const downloadBtn = document.getElementById("downloadBtn");
+    const clearBtn = document.getElementById("clearBtn");
 
+    if (downloadBtn) downloadBtn.style.display = "none";
+    if (clearBtn) clearBtn.style.display = "none";
+}
+
+
+
+/*
+ * ผูก event ให้ menu items
+ */
+document.querySelectorAll("[data-page]").forEach(item => {
+    item.addEventListener("click", () => {
+        showPage(item.dataset.page);
+    });
 });
+
+
+
+/*
+ * เริ่มต้นเมื่อ DOM โหลดเสร็จ
+ */
+document.addEventListener("DOMContentLoaded", init);
+
+
+
+/* ============================================
+ * Replace Field
+ * ============================================ */
+
+
+
+/* ============================================
+ * Replace Field
+ * ============================================ */
+
 
 
 /*
  * Replace Field
+
  *
  * เวอร์ชันนี้รองรับกรณีง่ายก่อน
  */
@@ -657,5 +933,6 @@ function escapeRegex(value) {
 
 </script>
 
+</div>
 </body>
 </html>
