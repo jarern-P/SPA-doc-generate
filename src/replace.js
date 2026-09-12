@@ -1,118 +1,111 @@
-function escapeRegex(value) {
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+// Replace Module - แทน {{field}} ใน XML ด้วยค่าจาก values
+(function (scope) {
+    'use strict';
 
-export function replaceFields(xml, values) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xml, "application/xml");
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    // กันลูปไม่รู้จบ กรณีค่าที่แทนเข้าไปมีรูปแบบ {{field}} เหมือนเดิม
+    const MAX_ITERATIONS_PER_PARAGRAPH = 1000;
 
-    const parserError = doc.getElementsByTagName("parsererror");
-    if (parserError.length > 0) {
-        console.error("XML Parse Error:", parserError[0].textContent);
-        return xml;
+    function escapeRegex(value) {
+        return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    const paragraphs = doc.getElementsByTagNameNS(W_NS, "p");
-
-    const fieldPattern = Object.keys(values)
-        .map(field => escapeRegex(field))
-        .join("|");
-
-    if (!fieldPattern) {
-        return xml;
+    function buildFieldRegex(fields) {
+        if (fields.length === 0) return null;
+        const pattern = fields.map(escapeRegex).join('|');
+        return new RegExp('\\{\\{\\s*(' + pattern + ')\\s*\\}\\}', 'g');
     }
 
-    const regex = new RegExp(
-        "\\{\\{\\s*(" + fieldPattern + ")\\s*\\}\\}",
-        "g"
-    );
+    // หา text node ที่ offset ตกอยู่ พร้อมตำแหน่งภายใน node นั้น
+    function locateOffset(parts, offset) {
+        let position = 0;
 
-    for (const paragraph of paragraphs) {
-        const textNodes = Array.from(
-            paragraph.getElementsByTagNameNS(W_NS, "t")
-        );
+        for (let i = 0; i < parts.length; i++) {
+            const end = position + parts[i].length;
 
-        if (textNodes.length === 0) {
-            continue;
+            // ใช้ < เพื่อให้ offset ที่อยู่ตรงรอยต่อไปอยู่ที่ node ถัดไป
+            if (offset < end || i === parts.length - 1) {
+                return { index: i, offset: Math.max(0, offset - position) };
+            }
+
+            position = end;
         }
 
-        let hasReplacement = true;
-        while (hasReplacement) {
-            hasReplacement = false;
+        return null;
+    }
 
-            const parts = textNodes.map(node => node.textContent || "");
-            const fullText = parts.join("");
+    // แทนค่า match หนึ่งรายการ โดยรักษา text node อื่นใน paragraph ไว้
+    function replaceMatch(textNodes, parts, match, replacement) {
+        const start = locateOffset(parts, match.index);
+        const end = locateOffset(parts, match.index + match[0].length);
 
-            if (!fullText.includes("{{") || !fullText.includes("}}")) {
-                break;
+        if (!start || !end || end.index < start.index) {
+            return false;
+        }
+
+        const before = parts[start.index].slice(0, start.offset);
+        const after = parts[end.index].slice(end.offset);
+
+        if (start.index === end.index) {
+            textNodes[start.index].textContent = before + replacement + after;
+            return true;
+        }
+
+        textNodes[start.index].textContent = before + replacement;
+
+        for (let i = start.index + 1; i < end.index; i++) {
+            textNodes[i].textContent = '';
+        }
+
+        textNodes[end.index].textContent = after;
+        return true;
+    }
+
+    function replaceInParagraph(paragraph, regex, values) {
+        const textNodes = Array.from(paragraph.getElementsByTagNameNS(W_NS, 't'));
+        if (textNodes.length === 0) return;
+
+        let iterations = 0;
+        while (iterations++ < MAX_ITERATIONS_PER_PARAGRAPH) {
+            const parts = textNodes.map(node => node.textContent || '');
+            const fullText = parts.join('');
+
+            if (fullText.indexOf('{{') === -1 || fullText.indexOf('}}') === -1) {
+                return;
             }
 
             regex.lastIndex = 0;
             const match = regex.exec(fullText);
+            if (!match) return;
 
-            if (!match) {
-                break;
-            }
-
-            const fieldName = match[1];
-            const replacement = String(values[fieldName] ?? "");
-            const matchStart = match.index;
-            const matchEnd = match.index + match[0].length;
-
-            let currentPosition = 0;
-            let startNodeIndex = -1;
-            let endNodeIndex = -1;
-            let startOffset = 0;
-            let endOffset = 0;
-
-            for (let i = 0; i < parts.length; i++) {
-                const nodeStart = currentPosition;
-                const nodeEnd = currentPosition + parts[i].length;
-
-                if (
-                    startNodeIndex === -1 &&
-                    matchStart >= nodeStart &&
-                    matchStart <= nodeEnd
-                ) {
-                    startNodeIndex = i;
-                    startOffset = matchStart - nodeStart;
-                }
-
-                if (matchEnd >= nodeStart && matchEnd <= nodeEnd) {
-                    endNodeIndex = i;
-                    endOffset = matchEnd - nodeStart;
-                    break;
-                }
-
-                currentPosition = nodeEnd;
-            }
-
-            if (startNodeIndex === -1 || endNodeIndex === -1) {
-                break;
-            }
-
-            const before = parts[startNodeIndex].substring(0, startOffset);
-            const after = parts[endNodeIndex].substring(endOffset);
-
-            if (startNodeIndex === endNodeIndex) {
-                textNodes[startNodeIndex].textContent = before + replacement + after;
-            } else {
-                textNodes[startNodeIndex].textContent = before + replacement;
-
-                for (let i = startNodeIndex + 1; i < endNodeIndex; i++) {
-                    textNodes[i].textContent = "";
-                }
-
-                textNodes[endNodeIndex].textContent = after;
-            }
-
-            hasReplacement = true;
+            const replacement = String(values[match[1]] ?? '');
+            if (!replaceMatch(textNodes, parts, match, replacement)) return;
         }
+
+        console.warn('หยุดแทนค่าใน paragraph หนึ่งเพราะถึงขีดจำกัดรอบ');
     }
 
-    const serializer = new XMLSerializer();
-    return serializer.serializeToString(doc);
-}
+    function replaceFields(xml, values) {
+        if (!xml || !values) return xml;
 
-export { escapeRegex };
+        const regex = buildFieldRegex(Object.keys(values));
+        if (!regex) return xml;
+
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        if (doc.getElementsByTagName('parsererror').length > 0) {
+            console.error('XML Parse Error: ไม่สามารถแทนค่าได้');
+            return xml;
+        }
+
+        const paragraphs = doc.getElementsByTagNameNS(W_NS, 'p');
+        for (const paragraph of paragraphs) {
+            replaceInParagraph(paragraph, regex, values);
+        }
+
+        return new XMLSerializer().serializeToString(doc);
+    }
+
+    scope.Replace = {
+        replaceFields: replaceFields
+    };
+})(window);

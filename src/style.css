@@ -91,11 +91,14 @@ body {
     font-weight: bold;
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
     width: 100%;
     box-sizing: border-box;
     padding: 10px;
     font-size: 16px;
+    font-family: inherit;
 }
 
 button {
@@ -107,4 +110,101 @@ button {
 
 #form {
     margin-top: 30px;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── หน้าตั้งค่า template ── */
+.template-meta {
+    margin-top: 25px;
+}
+
+.template-meta label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.template-meta input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    font-size: 16px;
+    font-family: inherit;
+}
+
+.saved-templates {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.saved-templates h2 {
+    font-size: 18px;
+}
+
+.db-status {
+    font-size: 13px;
+    color: #666;
+    min-height: 18px;
+}
+
+.db-status.warn {
+    color: #a06000;
+}
+
+.db-status.error {
+    color: #b00020;
+}
+
+.saved-list {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+}
+
+.saved-list .empty {
+    color: #888;
+    font-size: 14px;
+    padding: 10px 0;
+}
+
+.saved-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.saved-item .info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.saved-item .meta {
+    font-size: 12px;
+    color: #777;
+}
+
+.saved-item .actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.saved-item button {
+    margin-top: 0;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+.saved-item button.danger {
+    color: #b00020;
 }

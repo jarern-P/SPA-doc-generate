@@ -7,7 +7,6 @@
     <title>Word Template Filler</title>
 
     <link rel="stylesheet" href="src/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 
 <body>
@@ -21,27 +20,18 @@
     </div>
 </div>
 
-<div class="main" id="mainContent">
-<h1>Word Template Filler</h1>
+<!-- เนื้อหาของแต่ละหน้าถูก render ด้วย app.js -->
+<div class="main" id="mainContent"></div>
 
-<div class="box">
-    <input
-        type="file"
-        id="fileInput"
-        accept=".docx"
-    >
-</div>
-
-<div id="form"></div>
-
-<button id="downloadBtn" style="display:none">
-    Download DOCX
-</button>
-<button id="clearBtn" style="display:none">
-    Clear
-</button>
-</div>
-
+<!-- โหลดตามลำดับ dependency: jszip -> modules -> components -> app -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="src/extract.js"></script>
+<script src="src/replace.js"></script>
+<script src="src/components/formPage.js"></script>
+<script src="src/components/sidebar.js"></script>
+<script src="src/components/reportPage.js"></script>
+<script src="src/components/templateConfigPage.js"></script>
+<script src="src/db.js"></script>
 <script src="src/app.js"></script>
 
 </body>
