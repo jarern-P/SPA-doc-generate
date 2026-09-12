@@ -55,7 +55,7 @@
 
 <body>
 
-<h1>Word Template Filler</h1>
+<h1>Word Template Fillerหห</h1>
 
 <div class="box">
     <input
@@ -70,6 +70,9 @@
 <button id="downloadBtn" style="display:none">
     Download DOCX
 </button>
+<button id="clearBtn" style="display:none">
+    Clear
+</button>
 
 <script>
 
@@ -80,6 +83,7 @@ let originalXml = null;
 const fileInput = document.getElementById("fileInput");
 const form = document.getElementById("form");
 const downloadBtn = document.getElementById("downloadBtn");
+const clearBtn = document.getElementById("clearBtn");
 
 fileInput.addEventListener("change", async (event) => {
 
@@ -104,6 +108,8 @@ fileInput.addEventListener("change", async (event) => {
 
         downloadBtn.style.display =
             fields.length > 0 ? "block" : "none";
+
+        clearBtn.style.display = originalZip ? "block" : "none";
 
         console.log("Fields:", fields);
 
@@ -313,437 +319,39 @@ downloadBtn.addEventListener("click", async () => {
 
 });
 
+clearBtn.addEventListener("click", () => {
+
+    /*
+     * Clear file input
+     */
+    fileInput.value = "";
+
+    /*
+     * Clear form
+     */
+    form.innerHTML = "";
+
+    /*
+     * Reset data
+     */
+    originalZip = null;
+    originalXml = null;
+    fields = [];
+
+    /*
+     * Hide buttons
+     */
+    downloadBtn.style.display = "none";
+    clearBtn.style.display = "none";
+
+});
+
 
 /*
  * Replace Field
  *
  * เวอร์ชันนี้รองรับกรณีง่ายก่อน
  */
-// function replaceFields(xml, values) {
-
-//     for (const field of fields) {
-
-//         const value =
-//             values[field] ?? "";
-
-//         const escapedValue =
-//             escapeXml(value);
-
-//         /*
-//          * Replace แบบ text ตรง ๆ
-//          */
-//         const regex =
-//             new RegExp(
-//                 "\\{\\{\\s*" +
-//                 escapeRegex(field) +
-//                 "\\s*\\}\\}",
-//                 "g"
-//             );
-
-//         xml =
-//             xml.replace(
-//                 regex,
-//                 escapedValue
-//             );
-//     }
-
-//     return xml;
-// }
-
-
-// /*
-//  * Escape XML
-//  */
-// function escapeXml(value) {
-
-//     return String(value)
-//         .replace(/&/g, "&amp;")
-//         .replace(/</g, "&lt;")
-//         .replace(/>/g, "&gt;")
-//         .replace(/"/g, "&quot;")
-//         .replace(/'/g, "&apos;");
-
-// }
-
-
-// /*
-//  * Escape Regex
-//  */
-// function escapeRegex(value) {
-
-//     return value.replace(
-//         /[.*+?^${}()|[\]\\]/g,
-//         "\\$&"
-//     );
-
-// }
-// function replaceFields(xml, values) {
-
-//     const parser = new DOMParser();
-
-//     const doc = parser.parseFromString(
-//         xml,
-//         "application/xml"
-//     );
-
-//     /*
-//      * ตรวจสอบ XML parse error
-//      */
-//     const parserError =
-//         doc.getElementsByTagName("parsererror");
-
-//     if (parserError.length > 0) {
-//         console.error(
-//             "XML Parse Error:",
-//             parserError[0].textContent
-//         );
-
-//         return xml;
-//     }
-
-//     /*
-//      * Namespace ของ WordprocessingML
-//      */
-//     const W_NS =
-//         "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-
-//     /*
-//      * หา paragraph ทั้งหมด
-//      *
-//      * เราจะประมวลผลทีละ <w:p>
-//      * เพื่อไม่ให้ placeholder ข้าม paragraph
-//      */
-//     const paragraphs =
-//         doc.getElementsByTagNameNS(W_NS, "p");
-
-//     /*
-//      * วนทุก paragraph
-//      */
-//     for (const paragraph of paragraphs) {
-
-//         /*
-//          * หา <w:t> ทั้งหมดใน paragraph นี้
-//          */
-//         const textNodes =
-//             Array.from(
-//                 paragraph.getElementsByTagNameNS(
-//                     W_NS,
-//                     "t"
-//                 )
-//             );
-
-//         if (textNodes.length === 0) {
-//             continue;
-//         }
-
-//         /*
-//          * เก็บข้อความของแต่ละ <w:t>
-//          */
-//         const parts =
-//             textNodes.map(node =>
-//                 node.textContent || ""
-//             );
-
-//         /*
-//          * รวมข้อความทั้งหมด
-//          *
-//          * ตัวอย่าง:
-//          *
-//          * <w:t>{{test</w:t>
-//          * <w:t>_name</w:t>
-//          * <w:t>}}</w:t>
-//          *
-//          * จะกลายเป็น:
-//          *
-//          * {{test_name}}
-//          */
-//         const fullText =
-//             parts.join("");
-
-//         /*
-//          * ถ้าไม่มี {{ ก็ไม่ต้องทำอะไร
-//          */
-//         if (!fullText.includes("\{\{") || !fullText.includes("\}\}")) {
-//             continue;
-//         }
-//         /*
-//          * สร้าง regex จาก fields
-//          *
-//          * เช่น:
-//          *
-//          * fields = [
-//          *     "test_name",
-//          *     "customer_name"
-//          * ]
-//          *
-//          * จะหา:
-//          *
-//          * {{test_name}}
-//          * {{ customer_name }}
-//          */
-//         const fieldPattern =
-//             fields
-//                 .map(field =>
-//                     escapeRegex(field)
-//                 )
-//                 .join("|");
-
-//         if (!fieldPattern) {
-//             continue;
-//         }
-
-//         const regex =
-//             new RegExp(
-//                 "\\{\\{\\s*(" +
-//                 fieldPattern +
-//                 ")\\s*\\}\\}",
-//                 "g"
-//             );
-
-//         /*
-//          * Replace placeholder
-//          */
-//         const replacedText =
-//             fullText.replace(
-//                 regex,
-//                 function (
-//                     match,
-//                     fieldName
-//                 ) {
-
-//                     const value =
-//                         values[fieldName] ?? "";
-
-//                     /*
-//                      * ตรงนี้ไม่ต้อง escapeXml()
-//                      *
-//                      * เพราะ DOM textContent
-//                      * จะจัดการ XML escaping
-//                      * ตอน serialize ให้เอง
-//                      */
-//                     return String(value);
-//                 }
-//             );
-
-//         /*
-//          * ถ้าไม่มีการเปลี่ยนแปลง
-//          * ไม่ต้องกระจายข้อความกลับ
-//          */
-//         if (replacedText === fullText) {
-//             continue;
-//         }
-//         /*
-//          * กระจายข้อความกลับเข้า <w:t>
-//          *
-//          * โดยพยายามรักษาจำนวน character
-//          * ตามโครงสร้างเดิม
-//          */
-//         distributeText(
-//             textNodes,
-//             parts,
-//             replacedText
-//         );
-//     }
-
-//     /*
-//      * Serialize DOM กลับเป็น XML
-//      */
-//     const serializer =
-//         new XMLSerializer();
-
-//     return serializer.serializeToString(doc);
-// }
-
-
-// /*
-//  * กระจายข้อความกลับไปยัง <w:t>
-//  *
-//  * ตัวอย่างเดิม:
-//  *
-//  * <w:t>{{test</w:t>
-//  * <w:t>_name</w:t>
-//  * <w:t>}}</w:t>
-//  *
-//  * replaced:
-//  *
-//  * ทดสอบ
-//  *
-//  * จะเอาข้อความกลับไปใส่ใน <w:t>
-//  * โดยไม่ลบ <w:rPr>
-//  */
-// function distributeText(
-//     textNodes,
-//     originalParts,
-//     newText
-// ) {
-
-
-//     /*
-//      * จำนวน character ของแต่ละ <w:t>
-//      *
-//      * เช่น:
-//      *
-//      * "{{test"   = 6
-//      * "_name"    = 5
-//      * "}}"       = 2
-//      */
-//     const lengths =
-//         originalParts.map(
-//             part => part.length
-//         );
-
-//     /*
-//      * ตำแหน่ง character
-//      * ที่จะตัดข้อความ
-//      */
-//     let position = 0;
-
-//     for (
-//         let i = 0;
-//         i < textNodes.length;
-//         i++
-//     ) {
-
-//         const node =
-//             textNodes[i];
-
-//         /*
-//          * ถ้าเป็น <w:t> ตัวสุดท้าย
-//          * เอาข้อความที่เหลือทั้งหมด
-//          */
-//         if (
-//             i ===
-//             textNodes.length - 1
-//         ) {
-
-//             node.textContent =
-//                 newText.substring(
-//                     position
-//                 );
-
-//             break;
-//         }
-
-//         /*
-//          * ความยาวเดิมของ node
-//          */
-//         const length =
-//             lengths[i];
-
-//         /*
-//          * เอาข้อความตามจำนวนเดิม
-//          */
-//         node.textContent =
-//             newText.substring(
-//                 position,
-//                 position + length
-//             );
-
-//         position += length;
-//     }
-
-//     /*
-//      * ถ้า newText สั้นกว่าเดิม
-//      * อาจมี node ที่เหลือ
-//      *
-//      * เช่น:
-//      *
-//      * {{test_name}}
-//      *
-//      * กลายเป็น:
-//      *
-//      * ABC
-//      *
-//      * node อื่นต้องถูกเคลียร์
-//      */
-//     if (
-//         newText.length <
-//         lengths.reduce(
-//             (sum, length) =>
-//                 sum + length,
-//             0
-//         )
-//     ) {
-
-//         let remaining =
-//             newText.length;
-
-//         for (
-//             let i = 0;
-//             i < textNodes.length;
-//             i++
-//         ) {
-
-//             const node =
-//                 textNodes[i];
-
-//             const originalLength =
-//                 lengths[i];
-
-//             if (
-//                 remaining >=
-//                 originalLength
-//             ) {
-
-//                 remaining -=
-//                     originalLength;
-
-//             } else {
-
-//                 node.textContent =
-//                     newText.substring(
-//                         newText.length -
-//                         (
-//                             newText.length -
-//                             (
-//                                 lengths
-//                                     .slice(
-//                                         0,
-//                                         i
-//                                     )
-//                                     .reduce(
-//                                         (
-//                                             sum,
-//                                             value
-//                                         ) =>
-//                                             sum +
-//                                             value,
-//                                         0
-//                                     )
-//                             )
-//                         )
-//                     );
-
-//                 /*
-//                  * node ที่เหลือทั้งหมด
-//                  * ให้เป็นค่าว่าง
-//                  */
-//                 for (
-//                     let j = i + 1;
-//                     j < textNodes.length;
-//                     j++
-//                 ) {
-//                     textNodes[j]
-//                         .textContent = "";
-//                 }
-
-//                 break;
-//             }
-//         }
-//     }
-// }
-
-
-// /*
-//  * Escape Regex
-//  */
-// function escapeRegex(value) {
-
-//     return String(value).replace(
-//         /[.*+?^${}()|[\]\\]/g,
-//         "\\$&"
-//     );
-// }
 function replaceFields(xml, values) {
 
     const parser = new DOMParser();
