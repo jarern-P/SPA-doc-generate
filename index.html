@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Word Template Filler</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .box {
+            border: 2px dashed #aaa;
+            padding: 40px;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        .field {
+            margin: 15px 0;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .field input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #form {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>Word Template Filler</h1>
+
+<div class="box">
+    <input
+        type="file"
+        id="fileInput"
+        accept=".docx"
+    >
+</div>
+
+<div id="form"></div>
+
+<button id="downloadBtn" style="display:none">
+    Download DOCX
+</button>
+
+<script>
+
+let originalZip = null;
+let fields = [];
+let originalXml = null;
+
+const fileInput = document.getElementById("fileInput");
+const form = document.getElementById("form");
+const downloadBtn = document.getElementById("downloadBtn");
+
+fileInput.addEventListener("change", async (event) => {
+
+    const file = event.target.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    try {
+
+        originalZip = await JSZip.loadAsync(file);
+
+        const xml = await originalZip
+            .file("word/document.xml")
+            .async("string");
+        originalXml = xml;
+
+        fields = extractFields(originalXml);
+
+        renderForm(fields);
+
+        downloadBtn.style.display =
+            fields.length > 0 ? "block" : "none";
+
+        console.log("Fields:", fields);
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert("ไม่สามารถอ่านไฟล์ DOCX ได้");
+
+    }
+
+});
+
+
+/*
+ * อ่าน {{field}} จาก XML
+ *
+ * จุดสำคัญ:
+ *
+ * Word อาจเก็บแบบนี้:
+ *
+ * <w:t>{{customer_</w:t>
+ * <w:t>name}}</w:t>
+ *
+ * ดังนั้นเราไม่ควร regex จาก XML ตรง ๆ
+ *
+ * แต่ต้องรวมข้อความจาก w:t ก่อน
+ */
+function extractFields(xml) {
+
+    const parser = new DOMParser();
+
+    const doc = parser.parseFromString(
+        xml,
+        "application/xml"
+    );
+
+    const textNodes =
+        [...doc.getElementsByTagName("w:t")];
+
+    let fullText = "";
+
+    for (const node of textNodes) {
+
+        fullText += node.textContent || "";
+
+    }
+
+    const regex = /\{\{\s*([a-zA-Z0-9_ก-๙]+)\s*\}\}/g;
+
+    const result = new Set();
+
+    let match;
+
+    while ((match = regex.exec(fullText)) !== null) {
+
+        result.add(match[1]);
+
+    }
+
+    return [...result];
+}
+
+
+/*
+ * สร้าง Form จาก Fields
+ */
+function renderForm(fields) {
+
+    form.innerHTML = "";
+
+    if (fields.length === 0) {
+
+        form.innerHTML =
+            "<p>ไม่พบ {{field}} ใน Template</p>";
+
+        return;
+    }
+
+    const title =
+        document.createElement("h2");
+
+    title.textContent =
+        "กรอกข้อมูล";
+
+    form.appendChild(title);
+
+
+    for (const field of fields) {
+
+        const wrapper =
+            document.createElement("div");
+
+        wrapper.className = "field";
+
+
+        const label =
+            document.createElement("label");
+
+        label.textContent = field;
+
+
+        const input =
+            document.createElement("input");
+
+        input.type = "text";
+
+        input.dataset.field = field;
+
+        input.placeholder =
+            `กรอก ${field}`;
+
+
+        wrapper.appendChild(label);
+
+        wrapper.appendChild(input);
+
+        form.appendChild(wrapper);
+    }
+}
+
+
+/*
+ * Download
+ */
+downloadBtn.addEventListener("click", async () => {
+
+    if (!originalZip) {
+        return;
+    }
+
+    /*
+     * Clone ZIP ใหม่
+     *
+     * เพื่อไม่แก้ originalZip โดยตรง
+     */
+    const zip = originalZip;
+
+
+    /*
+     * อ่าน document.xml
+     */
+    // let xml = await zip
+    //     .file("word/document.xml")
+    //     .async("string");
+    let xml = originalXml;
+
+    /*
+     * อ่านค่าจาก Form
+     */
+    const values = {};
+
+    const inputs =
+        [...form.querySelectorAll("input")];
+
+    for (const input of inputs) {
+
+        values[input.dataset.field] =
+            input.value;
+
+    }
+
+    /*
+     * Replace
+     */
+    xml = replaceFields(
+        xml,
+        values
+    );
+
+
+    /*
+     * ใส่ XML กลับเข้า ZIP
+     */
+    zip.file(
+        "word/document.xml",
+        xml
+    );
+
+
+    /*
+     * Generate DOCX
+     */
+    const blob =
+        await zip.generateAsync({
+            type: "blob"
+        });
+
+
+    /*
+     * Download
+     */
+    const url =
+        URL.createObjectURL(blob);
+
+    const a =
+        document.createElement("a");
+
+    a.href = url;
+
+    a.download =
+        "generated-document.docx";
+
+    a.click();
+
+    URL.revokeObjectURL(url);
+
+});
+
+
+/*
+ * Replace Field
+ *
+ * เวอร์ชันนี้รองรับกรณีง่ายก่อน
+ */
+// function replaceFields(xml, values) {
+
+//     for (const field of fields) {
+
+//         const value =
+//             values[field] ?? "";
+
+//         const escapedValue =
+//             escapeXml(value);
+
+//         /*
+//          * Replace แบบ text ตรง ๆ
+//          */
+//         const regex =
+//             new RegExp(
+//                 "\\{\\{\\s*" +
+//                 escapeRegex(field) +
+//                 "\\s*\\}\\}",
+//                 "g"
+//             );
+
+//         xml =
+//             xml.replace(
+//                 regex,
+//                 escapedValue
+//             );
+//     }
+
+//     return xml;
+// }
+
+
+// /*
+//  * Escape XML
+//  */
+// function escapeXml(value) {
+
+//     return String(value)
+//         .replace(/&/g, "&amp;")
+//         .replace(/</g, "&lt;")
+//         .replace(/>/g, "&gt;")
+//         .replace(/"/g, "&quot;")
+//         .replace(/'/g, "&apos;");
+
+// }
+
+
+// /*
+//  * Escape Regex
+//  */
+// function escapeRegex(value) {
+
+//     return value.replace(
+//         /[.*+?^${}()|[\]\\]/g,
+//         "\\$&"
+//     );
+
+// }
+// function replaceFields(xml, values) {
+
+//     const parser = new DOMParser();
+
+//     const doc = parser.parseFromString(
+//         xml,
+//         "application/xml"
+//     );
+
+//     /*
+//      * ตรวจสอบ XML parse error
+//      */
+//     const parserError =
+//         doc.getElementsByTagName("parsererror");
+
+//     if (parserError.length > 0) {
+//         console.error(
+//             "XML Parse Error:",
+//             parserError[0].textContent
+//         );
+
+//         return xml;
+//     }
+
+//     /*
+//      * Namespace ของ WordprocessingML
+//      */
+//     const W_NS =
+//         "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+//     /*
+//      * หา paragraph ทั้งหมด
+//      *
+//      * เราจะประมวลผลทีละ <w:p>
+//      * เพื่อไม่ให้ placeholder ข้าม paragraph
+//      */
+//     const paragraphs =
+//         doc.getElementsByTagNameNS(W_NS, "p");
+
+//     /*
+//      * วนทุก paragraph
+//      */
+//     for (const paragraph of paragraphs) {
+
+//         /*
+//          * หา <w:t> ทั้งหมดใน paragraph นี้
+//          */
+//         const textNodes =
+//             Array.from(
+//                 paragraph.getElementsByTagNameNS(
+//                     W_NS,
+//                     "t"
+//                 )
+//             );
+
+//         if (textNodes.length === 0) {
+//             continue;
+//         }
+
+//         /*
+//          * เก็บข้อความของแต่ละ <w:t>
+//          */
+//         const parts =
+//             textNodes.map(node =>
+//                 node.textContent || ""
+//             );
+
+//         /*
+//          * รวมข้อความทั้งหมด
+//          *
+//          * ตัวอย่าง:
+//          *
+//          * <w:t>{{test</w:t>
+//          * <w:t>_name</w:t>
+//          * <w:t>}}</w:t>
+//          *
+//          * จะกลายเป็น:
+//          *
+//          * {{test_name}}
+//          */
+//         const fullText =
+//             parts.join("");
+
+//         /*
+//          * ถ้าไม่มี {{ ก็ไม่ต้องทำอะไร
+//          */
+//         if (!fullText.includes("\{\{") || !fullText.includes("\}\}")) {
+//             continue;
+//         }
+//         /*
+//          * สร้าง regex จาก fields
+//          *
+//          * เช่น:
+//          *
+//          * fields = [
+//          *     "test_name",
+//          *     "customer_name"
+//          * ]
+//          *
+//          * จะหา:
+//          *
+//          * {{test_name}}
+//          * {{ customer_name }}
+//          */
+//         const fieldPattern =
+//             fields
+//                 .map(field =>
+//                     escapeRegex(field)
+//                 )
+//                 .join("|");
+
+//         if (!fieldPattern) {
+//             continue;
+//         }
+
+//         const regex =
+//             new RegExp(
+//                 "\\{\\{\\s*(" +
+//                 fieldPattern +
+//                 ")\\s*\\}\\}",
+//                 "g"
+//             );
+
+//         /*
+//          * Replace placeholder
+//          */
+//         const replacedText =
+//             fullText.replace(
+//                 regex,
+//                 function (
+//                     match,
+//                     fieldName
+//                 ) {
+
+//                     const value =
+//                         values[fieldName] ?? "";
+
+//                     /*
+//                      * ตรงนี้ไม่ต้อง escapeXml()
+//                      *
+//                      * เพราะ DOM textContent
+//                      * จะจัดการ XML escaping
+//                      * ตอน serialize ให้เอง
+//                      */
+//                     return String(value);
+//                 }
+//             );
+
+//         /*
+//          * ถ้าไม่มีการเปลี่ยนแปลง
+//          * ไม่ต้องกระจายข้อความกลับ
+//          */
+//         if (replacedText === fullText) {
+//             continue;
+//         }
+//         /*
+//          * กระจายข้อความกลับเข้า <w:t>
+//          *
+//          * โดยพยายามรักษาจำนวน character
+//          * ตามโครงสร้างเดิม
+//          */
+//         distributeText(
+//             textNodes,
+//             parts,
+//             replacedText
+//         );
+//     }
+
+//     /*
+//      * Serialize DOM กลับเป็น XML
+//      */
+//     const serializer =
+//         new XMLSerializer();
+
+//     return serializer.serializeToString(doc);
+// }
+
+
+// /*
+//  * กระจายข้อความกลับไปยัง <w:t>
+//  *
+//  * ตัวอย่างเดิม:
+//  *
+//  * <w:t>{{test</w:t>
+//  * <w:t>_name</w:t>
+//  * <w:t>}}</w:t>
+//  *
+//  * replaced:
+//  *
+//  * ทดสอบ
+//  *
+//  * จะเอาข้อความกลับไปใส่ใน <w:t>
+//  * โดยไม่ลบ <w:rPr>
+//  */
+// function distributeText(
+//     textNodes,
+//     originalParts,
+//     newText
+// ) {
+
+
+//     /*
+//      * จำนวน character ของแต่ละ <w:t>
+//      *
+//      * เช่น:
+//      *
+//      * "{{test"   = 6
+//      * "_name"    = 5
+//      * "}}"       = 2
+//      */
+//     const lengths =
+//         originalParts.map(
+//             part => part.length
+//         );
+
+//     /*
+//      * ตำแหน่ง character
+//      * ที่จะตัดข้อความ
+//      */
+//     let position = 0;
+
+//     for (
+//         let i = 0;
+//         i < textNodes.length;
+//         i++
+//     ) {
+
+//         const node =
+//             textNodes[i];
+
+//         /*
+//          * ถ้าเป็น <w:t> ตัวสุดท้าย
+//          * เอาข้อความที่เหลือทั้งหมด
+//          */
+//         if (
+//             i ===
+//             textNodes.length - 1
+//         ) {
+
+//             node.textContent =
+//                 newText.substring(
+//                     position
+//                 );
+
+//             break;
+//         }
+
+//         /*
+//          * ความยาวเดิมของ node
+//          */
+//         const length =
+//             lengths[i];
+
+//         /*
+//          * เอาข้อความตามจำนวนเดิม
+//          */
+//         node.textContent =
+//             newText.substring(
+//                 position,
+//                 position + length
+//             );
+
+//         position += length;
+//     }
+
+//     /*
+//      * ถ้า newText สั้นกว่าเดิม
+//      * อาจมี node ที่เหลือ
+//      *
+//      * เช่น:
+//      *
+//      * {{test_name}}
+//      *
+//      * กลายเป็น:
+//      *
+//      * ABC
+//      *
+//      * node อื่นต้องถูกเคลียร์
+//      */
+//     if (
+//         newText.length <
+//         lengths.reduce(
+//             (sum, length) =>
+//                 sum + length,
+//             0
+//         )
+//     ) {
+
+//         let remaining =
+//             newText.length;
+
+//         for (
+//             let i = 0;
+//             i < textNodes.length;
+//             i++
+//         ) {
+
+//             const node =
+//                 textNodes[i];
+
+//             const originalLength =
+//                 lengths[i];
+
+//             if (
+//                 remaining >=
+//                 originalLength
+//             ) {
+
+//                 remaining -=
+//                     originalLength;
+
+//             } else {
+
+//                 node.textContent =
+//                     newText.substring(
+//                         newText.length -
+//                         (
+//                             newText.length -
+//                             (
+//                                 lengths
+//                                     .slice(
+//                                         0,
+//                                         i
+//                                     )
+//                                     .reduce(
+//                                         (
+//                                             sum,
+//                                             value
+//                                         ) =>
+//                                             sum +
+//                                             value,
+//                                         0
+//                                     )
+//                             )
+//                         )
+//                     );
+
+//                 /*
+//                  * node ที่เหลือทั้งหมด
+//                  * ให้เป็นค่าว่าง
+//                  */
+//                 for (
+//                     let j = i + 1;
+//                     j < textNodes.length;
+//                     j++
+//                 ) {
+//                     textNodes[j]
+//                         .textContent = "";
+//                 }
+
+//                 break;
+//             }
+//         }
+//     }
+// }
+
+
+// /*
+//  * Escape Regex
+//  */
+// function escapeRegex(value) {
+
+//     return String(value).replace(
+//         /[.*+?^${}()|[\]\\]/g,
+//         "\\$&"
+//     );
+// }
+function replaceFields(xml, values) {
+
+    const parser = new DOMParser();
+
+    const doc = parser.parseFromString(
+        xml,
+        "application/xml"
+    );
+
+    /*
+     * ตรวจสอบ XML parse error
+     */
+    const parserError =
+        doc.getElementsByTagName("parsererror");
+
+    if (parserError.length > 0) {
+
+        console.error(
+            "XML Parse Error:",
+            parserError[0].textContent
+        );
+
+        return xml;
+    }
+
+    const W_NS =
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+    /*
+     * หา paragraph ทั้งหมด
+     */
+    const paragraphs =
+        doc.getElementsByTagNameNS(
+            W_NS,
+            "p"
+        );
+
+    /*
+     * สร้าง Regex สำหรับ Field
+     */
+    const fieldPattern =
+        fields
+            .map(field =>
+                escapeRegex(field)
+            )
+            .join("|");
+
+    if (!fieldPattern) {
+        return xml;
+    }
+
+    const regex =
+        new RegExp(
+            "\\{\\{\\s*(" +
+            fieldPattern +
+            ")\\s*\\}\\}",
+            "g"
+        );
+
+    /*
+     * ประมวลผลทีละ paragraph
+     */
+    for (const paragraph of paragraphs) {
+
+        const textNodes =
+            Array.from(
+                paragraph.getElementsByTagNameNS(
+                    W_NS,
+                    "t"
+                )
+            );
+
+        if (textNodes.length === 0) {
+            continue;
+        }
+
+        /*
+         * ทำงานซ้ำจนกว่า paragraph
+         * จะไม่มี placeholder เหลือ
+         */
+        let hasReplacement = true;
+
+        while (hasReplacement) {
+
+            hasReplacement = false;
+
+            /*
+             * สร้างข้อมูลตำแหน่งของแต่ละ w:t
+             */
+            const parts =
+                textNodes.map(node =>
+                    node.textContent || ""
+                );
+
+            const fullText =
+                parts.join("");
+
+            /*
+             * ถ้าไม่มี placeholder
+             */
+            if (
+                !fullText.includes("\{\{") ||
+                !fullText.includes("\}\}")
+            ) {
+                break;
+            }
+
+            /*
+             * หา placeholder ตัวแรก
+             */
+            regex.lastIndex = 0;
+
+            const match =
+                regex.exec(fullText);
+
+            if (!match) {
+                break;
+            }
+
+            const fieldName =
+                match[1];
+
+            const replacement =
+                String(
+                    values[fieldName] ?? ""
+                );
+
+            const matchStart =
+                match.index;
+
+            const matchEnd =
+                match.index +
+                match[0].length;
+
+            /*
+             * หาว่า placeholder
+             * อยู่ใน textNode ไหน
+             */
+            let currentPosition = 0;
+
+            let startNodeIndex = -1;
+            let endNodeIndex = -1;
+
+            let startOffset = 0;
+            let endOffset = 0;
+
+            for (
+                let i = 0;
+                i < parts.length;
+                i++
+            ) {
+
+                const nodeStart =
+                    currentPosition;
+
+                const nodeEnd =
+                    currentPosition +
+                    parts[i].length;
+
+                /*
+                 * จุดเริ่ม placeholder
+                 */
+                if (
+                    startNodeIndex === -1 &&
+                    matchStart >= nodeStart &&
+                    matchStart <= nodeEnd
+                ) {
+
+                    startNodeIndex = i;
+
+                    startOffset =
+                        matchStart -
+                        nodeStart;
+                }
+
+                /*
+                 * จุดจบ placeholder
+                 */
+                if (
+                    matchEnd >= nodeStart &&
+                    matchEnd <= nodeEnd
+                ) {
+
+                    endNodeIndex = i;
+
+                    endOffset =
+                        matchEnd -
+                        nodeStart;
+
+                    break;
+                }
+
+                currentPosition =
+                    nodeEnd;
+            }
+
+            /*
+             * ถ้าหา node ไม่เจอ
+             */
+            if (
+                startNodeIndex === -1 ||
+                endNodeIndex === -1
+            ) {
+                break;
+            }
+
+            /*
+             * ข้อความก่อน placeholder
+             */
+            const before =
+                parts[startNodeIndex]
+                    .substring(
+                        0,
+                        startOffset
+                    );
+
+            /*
+             * ข้อความหลัง placeholder
+             */
+            const after =
+                parts[endNodeIndex]
+                    .substring(
+                        endOffset
+                    );
+
+            /*
+             * กรณี placeholder อยู่
+             * ใน <w:t> เดียว
+             */
+            if (
+                startNodeIndex ===
+                endNodeIndex
+            ) {
+
+                textNodes[startNodeIndex]
+                    .textContent =
+                    before +
+                    replacement +
+                    after;
+
+            } else {
+
+                /*
+                 * ใส่ข้อความทั้งหมด
+                 * ลง node แรก
+                 *
+                 * สำคัญ:
+                 * <w:rPr> ไม่ถูกแตะ
+                 */
+                textNodes[startNodeIndex]
+                    .textContent =
+                    before +
+                    replacement;
+
+                /*
+                 * เคลียร์ node ที่อยู่
+                 * ระหว่าง placeholder
+                 */
+                for (
+                    let i =
+                        startNodeIndex + 1;
+                    i < endNodeIndex;
+                    i++
+                ) {
+
+                    textNodes[i]
+                        .textContent = "";
+                }
+
+                /*
+                 * node สุดท้ายของ placeholder
+                 * เหลือเฉพาะข้อความหลัง
+                 */
+                textNodes[endNodeIndex]
+                    .textContent =
+                    after;
+            }
+
+            hasReplacement = true;
+        }
+    }
+
+    /*
+     * Serialize XML กลับ
+     */
+    const serializer =
+        new XMLSerializer();
+
+    return serializer.serializeToString(doc);
+}
+
+
+/*
+ * Escape Regex
+ */
+function escapeRegex(value) {
+
+    return String(value).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+    );
+}
+
+</script>
+
+</body>
+</html>
