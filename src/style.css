@@ -101,6 +101,34 @@ body {
     font-family: inherit;
 }
 
+/* checkbox ไม่ต้องกว้างเต็มบรรทัด / textarea ย่อขยายได้เฉพาะแนวตั้ง */
+.field input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+}
+
+.field textarea {
+    resize: vertical;
+}
+
+.hint {
+    color: #777;
+    font-size: 15px;
+}
+
+/* ช่องวันที่ + ข้อความแสดงค่าที่จะใส่จริงในเอกสาร */
+.field-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.field-preview {
+    font-size: 13px;
+    color: #0a7a3d;
+    min-height: 16px;
+}
+
 button {
     margin-top: 20px;
     padding: 12px 20px;
@@ -128,7 +156,8 @@ button:disabled {
     font-weight: bold;
 }
 
-.template-meta input {
+.template-meta input,
+.template-meta select {
     width: 100%;
     box-sizing: border-box;
     padding: 10px;

@@ -2,17 +2,6 @@
 (function (scope) {
     'use strict';
 
-    const DEFAULT_TYPE = 'text';
-
-    const FIELD_TYPES = [
-        { value: 'text', label: 'Text (ข้อความ)' },
-        { value: 'number', label: 'Number (ตัวเลข)' },
-        { value: 'date', label: 'Date (วันที่)' },
-        { value: 'checkbox', label: 'Checkbox (ติ๊ก/ไม่ติ๊ก)' },
-        { value: 'textarea', label: 'Long text (ข้อความยาว)' },
-        { value: 'email', label: 'Email' }
-    ];
-
     const META_HTML = [
         '<div class="template-meta">',
         '    <label for="templateName">ชื่อ Template</label>',
@@ -37,14 +26,14 @@
         select.dataset.field = field;
         select.className = 'field-type';
 
-        for (const type of FIELD_TYPES) {
+        for (const type of scope.FieldTypes.options) {
             const option = document.createElement('option');
             option.value = type.value;
             option.textContent = type.label;
             select.appendChild(option);
         }
 
-        select.value = DEFAULT_TYPE;
+        select.value = scope.FieldTypes.defaultValue;
         return select;
     }
 
@@ -113,10 +102,12 @@
     const page = scope.FormPage.create({
         title: 'Template Configuration',
         formTitle: 'ตั้งค่า Type ของแต่ละ Field',
+        showDownload: false,   // หน้านี้มีแต่ค่า type ไม่ใช่ค่าที่จะใส่เอกสาร
         renderControl: createTypeSelect,
         metaHTML: META_HTML,
         actionsHTML: ACTIONS_HTML,
-        footerHTML: FOOTER_HTML
+        footerHTML: FOOTER_HTML,
+        emptyMessage: 'เลือกไฟล์ .docx ด้านบน หรือกด "โหลด" จากรายการด้านล่างเพื่อเริ่มตั้งค่า'
     });
 
     // ── ส่วนที่ใช้เฉพาะหน้านี้ ──
@@ -156,11 +147,4 @@
     };
 
     scope.TemplateConfigPage = page;
-
-    // ให้ส่วนอื่นเรียกใช้ตัวเลือก type ได้ (เช่น หน้ารายงานในอนาคต)
-    scope.FieldTypes = {
-        all: FIELD_TYPES.map(type => type.value),
-        options: FIELD_TYPES,
-        defaultValue: DEFAULT_TYPE
-    };
 })(window);

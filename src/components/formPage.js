@@ -10,6 +10,23 @@
         return document.getElementById(FORM_ID);
     }
 
+    // ── อ่าน/เขียนค่าของ control (รวม checkbox ที่ใช้ checked ไม่ใช่ value) ──
+    function readControlValue(control) {
+        if (control.type === 'checkbox') {
+            return control.checked ? 'true' : 'false';
+        }
+        return control.value;
+    }
+
+    function writeControlValue(control, value) {
+        if (control.type === 'checkbox') {
+            control.checked =
+                value === true || value === 'true' || value === '1' || value === 'on';
+            return;
+        }
+        control.value = value;
+    }
+
     // ค่าเริ่มต้น: ช่องข้อความธรรมดา
     function createTextField(field) {
         const input = document.createElement('input');
@@ -40,24 +57,38 @@
         const metaHTML = config.metaHTML || '';
         const actionsHTML = config.actionsHTML || '';
         const footerHTML = config.footerHTML || '';
+        const emptyMessage = config.emptyMessage || '';
+        const showFileInput = config.showFileInput !== false;
+        // หน้าที่มีแต่ค่า config (เช่น หน้า Template Configuration) ไม่ควรมีปุ่มดาวน์โหลด
+        const showDownload = config.showDownload !== false;
 
         return {
             title: title,
 
             // HTML โครงของหน้าทั้งหมด (cache ได้)
             getHTML: function () {
-                return [
-                    '<h1>' + title + '</h1>',
-                    '<div class="box">',
-                    '    <input type="file" id="fileInput" accept=".docx">',
-                    '</div>',
-                    metaHTML,
-                    '<div id="form"></div>',
-                    actionsHTML,
-                    '<button id="downloadBtn" type="button" style="display:none">Download DOCX</button>',
+                const parts = ['<h1>' + title + '</h1>'];
+
+                if (showFileInput) {
+                    parts.push(
+                        '<div class="box">',
+                        '    <input type="file" id="fileInput" accept=".docx">',
+                        '</div>'
+                    );
+                }
+
+                parts.push(metaHTML, '<div id="form"></div>', actionsHTML);
+
+                if (showDownload) {
+                    parts.push('<button id="downloadBtn" type="button" style="display:none">Download DOCX</button>');
+                }
+
+                parts.push(
                     '<button id="clearBtn" type="button" style="display:none">Clear</button>',
                     footerHTML
-                ].join('\n');
+                );
+
+                return parts.join('\n');
             },
 
             // วาดฟอร์มจากรายชื่อ field ที่พบใน template
@@ -83,6 +114,21 @@
                 }
             },
 
+            // ข้อความตอนยังไม่มี template ให้กรอก
+            showEmptyState: function () {
+                const form = getFormElement();
+                if (!form) return;
+
+                form.innerHTML = '';
+
+                if (!emptyMessage) return;
+
+                const hint = document.createElement('p');
+                hint.className = 'hint';
+                hint.textContent = emptyMessage;
+                form.appendChild(hint);
+            },
+
             // เติมค่าที่เคยกรอกไว้กลับเข้า control (ใช้ตอนสลับหน้า)
             applyValues: function (values) {
                 const form = getFormElement();
@@ -90,7 +136,7 @@
 
                 form.querySelectorAll(FIELD_SELECTOR).forEach(function (control) {
                     if (Object.prototype.hasOwnProperty.call(values, control.dataset.field)) {
-                        control.value = values[control.dataset.field];
+                        writeControlValue(control, values[control.dataset.field]);
                     }
                 });
             },
@@ -102,14 +148,9 @@
                 if (!form) return values;
 
                 form.querySelectorAll(FIELD_SELECTOR).forEach(function (control) {
-                    values[control.dataset.field] = control.value;
+                    values[control.dataset.field] = readControlValue(control);
                 });
                 return values;
-            },
-
-            clearForm: function () {
-                const form = getFormElement();
-                if (form) form.innerHTML = '';
             },
 
             hideButtons: function () {
@@ -136,6 +177,8 @@
     }
 
     scope.FormPage = {
-        create: create
+        create: create,
+        readControlValue: readControlValue,
+        writeControlValue: writeControlValue
     };
 })(window);

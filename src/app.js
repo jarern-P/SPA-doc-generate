@@ -29,6 +29,7 @@
     const pageCache = {};    // cache HTML ของแต่ละหน้า
     let mainEl = null;
     let dbPromise = null;
+    let templateRecords = null;   // cache รายการ template ล่าสุดจากฐานข้อมูล
 
     // ──────────────────────────────────────────────────────────────
     // Helpers
@@ -117,7 +118,7 @@
         const component = getComponent(page);
 
         if (!state.loaded) {
-            component.clearForm();
+            component.showEmptyState();
             component.hideButtons();
             if (component.setSaveEnabled) component.setSaveEnabled(false);
             return;
@@ -137,7 +138,7 @@
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Database (โหลด lazy: เฉพาะตอนเข้า/ใช้หน้า Template Configuration)
+    // Database (โหลด lazy: เฉพาะตอนที่หน้านั้นต้องแสดงรายการ template หรือตอนบันทึก)
     // ──────────────────────────────────────────────────────────────
     function ensureDb() {
         if (!dbPromise) {
@@ -165,17 +166,33 @@
         if (config && config.setDbStatus) config.setDbStatus(text, kind);
     }
 
-    async function refreshTemplateList() {
+    // แสดงรายการให้ทุกส่วนที่อยู่บนหน้าปัจจุบัน (การ์ดในหน้า config และ dropdown ในหน้ารายงาน)
+    function renderTemplateChoosers(records, errorMessage) {
         const config = getComponent(CONFIG_PAGE);
-        if (!config.renderTemplateList || !document.getElementById('savedList')) return;
+        if (config.renderTemplateList && document.getElementById('savedList')) {
+            config.renderTemplateList(records, errorMessage);
+        }
+
+        const report = getComponent(DEFAULT_PAGE);
+        if (report.renderTemplateOptions && document.getElementById('templateSelect')) {
+            const message = errorMessage
+                ? errorMessage
+                : (records.length === 0 ? 'ยังไม่มี template ที่บันทึกไว้' : '— เลือก template ที่บันทึกไว้ —');
+            report.renderTemplateOptions(records, state.templateId, message);
+        }
+    }
+
+    async function refreshTemplateList() {
+        // ข้ามการโหลดฐานข้อมูลถ้าหน้าปัจจุบันไม่มีที่แสดงรายการ
+        if (!document.getElementById('savedList') && !document.getElementById('templateSelect')) return;
 
         try {
             await ensureDb();
-            const records = await scope.Db.list();
-            config.renderTemplateList(records);
+            templateRecords = await scope.Db.list();
+            renderTemplateChoosers(templateRecords);
         } catch (error) {
             console.error(error);
-            config.renderTemplateList([], 'โหลดรายการไม่สำเร็จ: ' + error.message);
+            renderTemplateChoosers([], 'โหลดรายการไม่สำเร็จ: ' + error.message);
         }
     }
 
@@ -186,7 +203,12 @@
         if (!target || !target.dataset) return;
 
         if (target.dataset.field) {
-            getPageValues(currentPage)[target.dataset.field] = target.value;
+            // ใช้ตัวอ่านค่าร่วมกับ FormPage เพื่อให้ checkbox/textarea ตรงกัน
+            getPageValues(currentPage)[target.dataset.field] = scope.FormPage.readControlValue(target);
+
+            // อัปเดตข้อความกำกับ (เช่น วันที่แบบไทย) ถ้าหน้านั้นมี
+            const component = getComponent(currentPage);
+            if (component.refreshPreviews) component.refreshPreviews();
         } else if (target.dataset.persist) {
             getPageMeta(currentPage)[target.dataset.persist] = target.value;
         }
@@ -198,6 +220,10 @@
 
             if (target && target.id === 'fileInput') {
                 onFileChange(event);
+                return;
+            }
+            if (target && target.id === 'templateSelect') {
+                onSelectTemplate(target.value);
                 return;
             }
             captureValue(target);
@@ -254,10 +280,7 @@
 
         currentPage = page;
         renderPage(page);
-
-        if (page === CONFIG_PAGE) {
-            refreshTemplateList();
-        }
+        refreshTemplateList();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -355,6 +378,13 @@
         }
     }
 
+    // เลือก template จาก dropdown ในหน้ารายงาน
+    function onSelectTemplate(value) {
+        const recordId = Number(value);
+        if (!recordId) return;
+        onLoadTemplate(recordId);
+    }
+
     async function onLoadTemplate(recordId) {
         if (!recordId) return;
 
@@ -394,6 +424,9 @@
             applyMeta(currentPage);
             fillForm(currentPage);
             setDbStatus('โหลด template แล้ว: ' + record.name);
+
+            // ให้ dropdown ของหน้ารายงานแสดง template ที่เพิ่งโหลด
+            if (templateRecords) renderTemplateChoosers(templateRecords);
         } catch (error) {
             console.error(error);
             alert('โหลด template ไม่สำเร็จ');
@@ -449,6 +482,7 @@
         scope.Sidebar.init();
         scope.Sidebar.setActive(DEFAULT_PAGE);
         renderPage(DEFAULT_PAGE);
+        refreshTemplateList();
     }
 
     if (document.readyState === 'loading') {

@@ -10,6 +10,19 @@
         return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    // w:t เก็บข้อความบรรทัดเดียว จึงแปลงขึ้นบรรทัดใหม่เป็นช่องว่าง
+    function normalizeValue(value) {
+        return String(value == null ? '' : value).replace(/\r\n?|\n/g, ' ');
+    }
+
+    // ใส่ข้อความลง text node และคงช่องว่างหัว/ท้ายไว้ (Word ตัดทิ้งถ้าไม่มี xml:space)
+    function setText(node, text) {
+        node.textContent = text;
+        if (text && text !== text.trim()) {
+            node.setAttribute('xml:space', 'preserve');
+        }
+    }
+
     function buildFieldRegex(fields) {
         if (fields.length === 0) return null;
         const pattern = fields.map(escapeRegex).join('|');
@@ -47,17 +60,17 @@
         const after = parts[end.index].slice(end.offset);
 
         if (start.index === end.index) {
-            textNodes[start.index].textContent = before + replacement + after;
+            setText(textNodes[start.index], before + replacement + after);
             return true;
         }
 
-        textNodes[start.index].textContent = before + replacement;
+        setText(textNodes[start.index], before + replacement);
 
         for (let i = start.index + 1; i < end.index; i++) {
             textNodes[i].textContent = '';
         }
 
-        textNodes[end.index].textContent = after;
+        setText(textNodes[end.index], after);
         return true;
     }
 
@@ -78,7 +91,7 @@
             const match = regex.exec(fullText);
             if (!match) return;
 
-            const replacement = String(values[match[1]] ?? '');
+            const replacement = normalizeValue(values[match[1]]);
             if (!replaceMatch(textNodes, parts, match, replacement)) return;
         }
 
